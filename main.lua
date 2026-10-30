@@ -4,6 +4,17 @@
 
 local Config = {
     ESP = true,
+    BoxStyle = "Cantos",
+    ESPNames = true,
+    ESPDistance = true,
+    ESPHealthText = true,
+    ESPHighlight = true,
+    ESPSkeleton = false,
+    ESPVisibleOnly = false,
+    ESPThickness = 1.5,
+    ESPDistanceLimit = 1200,
+    CatalogKind = "Item",
+
     Aim = true,
     Enabled = true,
     AimMode = "Automatico", -- Automatico or Ao segurar
@@ -60,6 +71,7 @@ local trackingLocked = false
 local resetAim, stopFire
 local fireTool, fireUntil, nextFire = nil, 0, 0
 local fireState = "Vincule a arma na aba Disparo"
+local restoreCosmetic, updateCosmetic
 local refreshUI
 local binding = GUI_NAME .. HttpService:GenerateGUID(false)
 local accent = Color3.fromRGB(99, 211, 255)
@@ -155,18 +167,32 @@ local pageDescriptions = {
     Disparo = "Acione a arma quando a mira estiver alinhada.",
     Visuais = "ESP, vida e distancia em tempo real.",
     Aparencia = "Escolha a cor e o acabamento do painel.",
+    Visual = "Catalogo Roblox / previa 3D e aparencia local.",
 }
 local pageTitle = textLabel(panel, "Combate", UDim2.fromOffset(208, 82), UDim2.fromOffset(510, 28), 22)
 pageTitle.Font = Enum.Font.GothamBold
+local searchBox = round(make("TextBox", {
+    Position = UDim2.fromOffset(208, 148), Size = UDim2.fromOffset(522, 30),
+    BackgroundColor3 = surface, BorderSizePixel = 0, Text = "", PlaceholderText = "Buscar controles nesta aba...",
+    PlaceholderColor3 = muted, ClearTextOnFocus = false, TextColor3 = white, TextSize = 12,
+    Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 12,
+}, panel), 7)
+make("UIPadding", {PaddingLeft = UDim.new(0, 12)}, searchBox)
+local searchableCards = {}
+local function filterCards()
+    local query = string.lower(searchBox.Text)
+    for _, item in ipairs(searchableCards) do item.object.Visible = query == "" or string.find(item.search, query, 1, true) ~= nil end
+end
+connect(searchBox:GetPropertyChangedSignal("Text"), filterCards)
 local pageDescription = textLabel(panel, pageDescriptions.Combate, UDim2.fromOffset(208, 113), UDim2.fromOffset(520, 21), 12, muted)
-for index, name in ipairs({"Combate", "Disparo", "Visuais", "Aparencia"}) do
+for index, name in ipairs({"Combate", "Disparo", "Visuais", "Visual", "Aparencia"}) do
     local nav = round(make("TextButton", {Position = UDim2.fromOffset(0, (index - 1) * 48),
         Size = UDim2.fromOffset(172, 40), BackgroundColor3 = surface, BorderSizePixel = 0,
         Text = string.format("%02d   %s", index, name), Font = Enum.Font.GothamMedium,
         TextSize = 13, TextColor3 = muted, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 12}, sidebar))
     make("UIPadding", {PaddingLeft = UDim.new(0, 14)}, nav)
-    local page = make("ScrollingFrame", {Name = name, Position = UDim2.fromOffset(208, 148),
-        Size = UDim2.fromOffset(530, 338), BackgroundTransparency = 1, BorderSizePixel = 0,
+    local page = make("ScrollingFrame", {Name = name, Position = UDim2.fromOffset(208, 188),
+        Size = UDim2.fromOffset(530, 298), BackgroundTransparency = 1, BorderSizePixel = 0,
         CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y,
         ScrollBarThickness = 3, ScrollBarImageColor3 = accent, Visible = name == activePage, ZIndex = 11}, panel)
     make("UIListLayout", {Padding = UDim.new(0, 9), SortOrder = Enum.SortOrder.LayoutOrder}, page)
@@ -175,6 +201,7 @@ for index, name in ipairs({"Combate", "Disparo", "Visuais", "Aparencia"}) do
     colored(page, "ScrollBarImageColor3")
     connect(nav.Activated, function()
         activePage = name
+        searchBox.Text = ""
         pageTitle.Text, pageDescription.Text = name, pageDescriptions[name]
         refreshUI()
     end)
@@ -211,6 +238,7 @@ local function card(page, label, description, height)
         BackgroundColor3 = surface, BorderSizePixel = 0, LayoutOrder = order, ZIndex = 12}, pages[page]), 9)
     textLabel(object, label, UDim2.fromOffset(14, 11), UDim2.new(1, -155, 0, 20), 13)
     textLabel(object, description, UDim2.fromOffset(14, 35), UDim2.new(1, -30, 0, 17), 10, muted)
+    table.insert(searchableCards, {object = object, search = string.lower(label .. " " .. description)})
     return object
 end
 local function changed()
@@ -301,12 +329,273 @@ slider("Disparo", "Intervalo entre pulsos", "A cadencia real ainda depende da ar
 slider("Disparo", "Tolerancia da mira", "O raycast tambem precisa atingir o personagem.", "FireTolerancePixels", 1, 20, 1, " px")
 card("Disparo", "Compatibilidade", "Aciona Tool:Activate(). Integracao com Urban Reload nao verificada.", 68)
 switch("Visuais", "ESP de jogadores", "Caixa, nome, vida e distancia.", "ESP")
+choice("Visuais", "Estilo da caixa", "Cantos, caixa completa ou sem caixa.", "BoxStyle", {"Cantos", "Completa", "Sem caixa"})
+switch("Visuais", "Contorno do personagem", "Destaque 3D com a cor do tema.", "ESPHighlight")
+switch("Visuais", "Esqueleto", "Linhas entre as juntas do rig R6/R15.", "ESPSkeleton")
+switch("Visuais", "Somente visiveis", "Oculta o ESP de personagens atras de obstaculos.", "ESPVisibleOnly")
+switch("Visuais", "Nome do jogador", "Nome acima da caixa.", "ESPNames")
+switch("Visuais", "Distancia", "Distancia abaixo da caixa, em studs.", "ESPDistance")
+switch("Visuais", "Vida numerica", "HP atual ao lado da barra lateral.", "ESPHealthText")
+slider("Visuais", "Espessura", "Linhas da caixa e do esqueleto.", "ESPThickness", 1, 3, 0.5, " px")
 switch("Visuais", "Circulo de FOV", "Mostra a area de aquisicao ao fechar o menu.", "ShowFOV")
 choice("Visuais", "Barra de vida", "Cor proporcional ao HP atual do Humanoid.", "HealthSide", {"Left", "Right"})
-slider("Visuais", "Distancia maxima", "Limite compartilhado pelo ESP e pela mira.", "MaxDistance", 100, 2000, 50, " st")
+slider("Visuais", "Distancia do ESP", "Ajusta somente os indicadores visuais.", "ESPDistanceLimit", 100, 2000, 50, " st")
 choice("Aparencia", "Cor de destaque", "Aplica a cor ao menu, FOV e ESP.", "Theme", {"Azul", "Verde", "Violeta", "Ambar"})
 switch("Aparencia", "Degrade sutil", "Desligado: fundo grafite solido.", "Gradient")
 card("Aparencia", "Janela adaptavel", "Arraste o cabecalho. O tamanho se ajusta a tela.", 68)
+
+-- Local cosmetic replica: leaves the gameplay rig, joints and server character untouched.
+do
+    local Marketplace = game:GetService("MarketplaceService")
+    local Assets = game:GetService("AssetService")
+    local currentDescription, previewModel, previewRig
+    local generation, busy = 0, false
+    local replica, replicaCharacter, mappings, hidden = nil, nil, {}, {}
+    local appearanceConnection
+    choice("Visual", "Tipo de ID", "Links identificam o tipo automaticamente.", "CatalogKind", {"Item", "Pacote", "Avatar"})
+    local inputCard = card("Visual", "Item ou skin do catalogo", "Cole um link Roblox ou um ID numerico.", 105)
+    local catalogInput = round(make("TextBox", {
+        Position = UDim2.fromOffset(14, 60), Size = UDim2.new(1, -28, 0, 31),
+        BackgroundColor3 = background, TextColor3 = white, PlaceholderColor3 = muted,
+        Text = "", PlaceholderText = "https://www.roblox.com/catalog/...",
+        Font = Enum.Font.Code, TextSize = 12, ClearTextOnFocus = false,
+        TextXAlignment = Enum.TextXAlignment.Left, BorderSizePixel = 0, ZIndex = 13,
+    }, inputCard), 6)
+    make("UIPadding", {PaddingLeft = UDim.new(0,8), PaddingRight = UDim.new(0,8)}, catalogInput)
+    local previewCard = card("Visual", "Provador 3D", "Aparencia local / nao altera seu inventario.", 335)
+    local viewport = round(make("ViewportFrame", {
+        Position = UDim2.fromOffset(14,60), Size = UDim2.new(1,-28,0,220), BackgroundColor3 = background,
+        BorderSizePixel = 0, Ambient = Color3.fromRGB(190,190,200), LightColor = Color3.new(1,1,1),
+        LightDirection = Vector3.new(-1,-1,-1), ZIndex = 13,
+    }, previewCard), 8)
+    local world = make("WorldModel", {}, viewport)
+    local previewCamera = make("Camera", {FieldOfView = 35}, viewport)
+    viewport.CurrentCamera = previewCamera
+    local catalogStatus = textLabel(previewCard, "Carregue um item, pacote ou avatar.",
+        UDim2.fromOffset(14,286), UDim2.new(1,-28,0,42), 11, muted)
+    catalogStatus.TextWrapped = true
+    catalogStatus.TextTruncate = Enum.TextTruncate.None
+    local actionCard = card("Visual", "Aplicar e restaurar", "Troca local, com restauracao ao renascer ou encerrar.", 108)
+    local function action(label, x, width)
+        local object = round(make("TextButton", {Position=UDim2.new(x,8,0,63), Size=UDim2.new(width,-16,0,30),
+            BackgroundColor3=background, Text=label, Font=Enum.Font.GothamMedium, TextSize=11,
+            TextColor3=accent, BorderSizePixel=0, ZIndex=13}, actionCard), 6)
+        colored(object,"TextColor3")
+        return object
+    end
+    local loadButton = action("Carregar previa",0,0.34)
+    local applyButton = action("Aplicar local",0.34,0.33)
+    local restoreButton = action("Restaurar",0.67,0.33)
+
+    restoreCosmetic = function()
+        if appearanceConnection then appearanceConnection:Disconnect(); appearanceConnection=nil end
+        if replica then replica:Destroy(); replica=nil end
+        for part, transparency in pairs(hidden) do
+            if part.Parent then part.LocalTransparencyModifier=transparency end
+        end
+        hidden, mappings, replicaCharacter = {}, {}, nil
+    end
+    local function rememberPart(part)
+        if part:IsA("BasePart") and not part:FindFirstAncestorOfClass("Tool") and hidden[part] == nil then
+            hidden[part]=part.LocalTransparencyModifier
+        end
+    end
+    updateCosmetic = function(camera)
+        if not replica then return end
+        if replicaCharacter ~= LocalPlayer.Character or not replicaCharacter.Parent then restoreCosmetic(); return end
+        replica.Parent=camera
+        -- Hide replica in first person so it cannot obstruct the weapon camera.
+        local head=replicaCharacter:FindFirstChild("Head")
+        local firstPerson=head and (camera.CFrame.Position-head.Position).Magnitude < 1.2
+        for _, binding in ipairs(mappings) do
+            if binding.source.Parent and binding.part.Parent then
+                binding.part.CFrame=binding.source.CFrame*binding.offset
+                binding.part.LocalTransparencyModifier=firstPerson and 1 or 0
+            end
+        end
+        for part in pairs(hidden) do
+            if part.Parent then part.LocalTransparencyModifier=1 else hidden[part]=nil end
+        end
+    end
+    local numericFields = {
+        [2]="GraphicTShirt",[11]="Shirt",[12]="Pants",[18]="Face",[17]="Head",
+        [27]="Torso",[28]="RightArm",[29]="LeftArm",[30]="LeftLeg",[31]="RightLeg",
+    }
+    local rigidFields = {[8]="HatAccessory",[41]="HairAccessory",[42]="FaceAccessory",[43]="NeckAccessory",
+        [44]="ShouldersAccessory",[45]="FrontAccessory",[46]="BackAccessory",[47]="WaistAccessory"}
+    local layeredTypes = {[64]="TShirt",[65]="Shirt",[66]="Pants",[67]="Jacket",[68]="Sweater",
+        [69]="Shorts",[70]="LeftShoe",[71]="RightShoe",[72]="DressSkirt"}
+    local function addAsset(description,id,skipUnknown)
+        local info=Marketplace:GetProductInfoAsync(id,Enum.InfoType.Asset)
+        local kind=info.AssetTypeId
+        if numericFields[kind] then description[numericFields[kind]]=id
+        elseif rigidFields[kind] then
+            local field=rigidFields[kind]
+            local ids={}
+            for value in string.gmatch(description[field],"%d+") do
+                if tonumber(value)~=id then table.insert(ids,value) end
+            end
+            table.insert(ids,tostring(id))
+            description[field]=table.concat(ids,",")
+        elseif layeredTypes[kind] then
+            local accessories=description:GetAccessories(true)
+            for i=#accessories,1,-1 do if accessories[i].AssetId==id then table.remove(accessories,i) end end
+            table.insert(accessories,{AssetId=id,AccessoryType=Enum.AccessoryType[layeredTypes[kind]],IsLayered=true,Order=#accessories+1})
+            description:SetAccessories(accessories,true)
+        elseif not skipUnknown then error("Tipo de item nao suportado no provador: "..tostring(kind)) end
+        return info.Name or tostring(id)
+    end
+    local function parseID(text)
+        text=string.match(text,"^%s*(.-)%s*$")
+        local kind,id=Config.CatalogKind,string.match(text,"^(%d+)$")
+        if not id then
+            local host=string.match(string.lower(text),"^https?://([^/]+)")
+            assert(host=="www.roblox.com" or host=="roblox.com","Use ID numerico ou link de roblox.com.")
+            id=string.match(text,"/catalog/(%d+)")
+            if id then kind="Item" else
+                id=string.match(text,"/bundles/(%d+)")
+                if id then kind="Pacote" else id=string.match(text,"/users/(%d+)"); kind="Avatar" end
+            end
+        end
+        id=tonumber(id)
+        assert(id and id>0 and id<9007199254740992 and id==math.floor(id),"ID ou link invalido.")
+        return id,kind
+    end
+    local function loadPreview()
+        if busy then return end
+        local character=LocalPlayer.Character
+        local humanoid=character and character:FindFirstChildOfClass("Humanoid")
+        if not humanoid then catalogStatus.Text="Aguarde seu personagem aparecer."; return end
+        generation=generation+1
+        local token=generation
+        local requestedText=catalogInput.Text
+        busy=true
+        catalogStatus.Text="Consultando catalogo e carregando aparencia..."
+        task.spawn(function()
+            local model,description
+            local ok,result=pcall(function()
+                local id,kind=parseID(requestedText)
+                local name=tostring(id)
+                if kind=="Avatar" then description=Players:GetHumanoidDescriptionFromUserIdAsync(id)
+                else
+                    description=currentDescription and currentDescription:Clone() or humanoid:GetAppliedDescription()
+                    if kind=="Pacote" then
+                        local details=Assets:GetBundleDetailsAsync(id)
+                        name=details.Name or name
+                        local outfit
+                        for _,item in ipairs(details.Items or {}) do if item.Type=="UserOutfit" then outfit=item.Id; break end end
+                        if outfit then
+                            description:Destroy()
+                            description=Players:GetHumanoidDescriptionFromOutfitIdAsync(outfit)
+                        else
+                            assert(#(details.Items or {})<=25,"Pacote grande demais para esta consulta.")
+                            for _,item in ipairs(details.Items or {}) do if item.Type=="Asset" then addAsset(description,item.Id,true) end end
+                        end
+                    else name=addAsset(description,id,false) end
+                end
+                -- Match the gameplay rig type; this operation creates a new local model.
+                model=Players:CreateHumanoidModelFromDescriptionAsync(description,humanoid.RigType)
+                for _,object in ipairs(model:GetDescendants()) do
+                    if object:IsA("BaseScript") or object:IsA("ModuleScript") then object:Destroy()
+                    elseif object:IsA("BasePart") then
+                        object.Anchored=true; object.CanCollide=false; object.CanTouch=false; object.CanQuery=false
+                    end
+                end
+                return name
+            end)
+            if stopped or token~=generation or LocalPlayer.Character~=character then
+                if model then model:Destroy() end
+                if description then description:Destroy() end
+                if token==generation then busy=false end
+                return
+            end
+            busy=false
+            if not ok then
+                if model then model:Destroy() end
+                if description then description:Destroy() end
+                catalogStatus.Text="Falha: "..string.sub(tostring(result),1,170)
+                warn("Zyon Visual: "..tostring(result))
+                return
+            end
+            if previewModel then previewModel:Destroy() end
+            if currentDescription then currentDescription:Destroy() end
+            currentDescription,previewModel,previewRig=description,model,humanoid.RigType
+            model.Parent=world
+            local bounds,size=model:GetBoundingBox()
+            local distance=math.max(size.X,size.Y,size.Z)*2.2
+            previewCamera.CFrame=CFrame.lookAt(bounds.Position+Vector3.new(distance*0.25,size.Y*0.12,-distance),bounds.Position)
+            catalogStatus.Text=tostring(result).." / previa pronta. Aplicacao somente local."
+        end)
+    end
+    connect(loadButton.Activated,loadPreview)
+    connect(catalogInput.FocusLost,function(enter) if enter then loadPreview() end end)
+    connect(applyButton.Activated,function()
+        if busy or not previewModel then catalogStatus.Text="Carregue uma previa primeiro."; return end
+        if not Workspace.CurrentCamera then catalogStatus.Text="Aguarde a camera do jogo."; return end
+        local character=LocalPlayer.Character
+        local humanoid=character and character:FindFirstChildOfClass("Humanoid")
+        if not humanoid or humanoid.RigType~=previewRig then catalogStatus.Text="Rig mudou. Recarregue a previa."; return end
+        local model=previewModel:Clone()
+        local bindings={}
+        local headMapped,torsoMapped=false,false
+        for _,part in ipairs(model:GetDescendants()) do
+            if part:IsA("BasePart") then
+                local source,offset
+                if part.Parent==model then
+                    source=character:FindFirstChild(part.Name)
+                    offset=CFrame.new()
+                else
+                    local weld=part:FindFirstChild("AccessoryWeld")
+                    local body=weld and weld:IsA("Weld") and weld.Part1
+                    if body and body.Parent==model then
+                        source=character:FindFirstChild(body.Name)
+                        offset=body.CFrame:ToObjectSpace(part.CFrame)
+                    end
+                end
+                if source and source:IsA("BasePart") then
+                    table.insert(bindings,{part=part,source=source,offset=offset})
+                    if part.Name=="Head" and part.Parent==model then headMapped=true end
+                    if (part.Name=="Torso" or part.Name=="UpperTorso") and part.Parent==model then torsoMapped=true end
+                else part.Transparency=1 end
+            end
+        end
+        if not headMapped or not torsoMapped then model:Destroy(); catalogStatus.Text="Rig do jogo incompativel com a copia visual."; return end
+        local duplicateHumanoid=model:FindFirstChildOfClass("Humanoid")
+        if duplicateHumanoid then
+            duplicateHumanoid.RequiresNeck=false
+            duplicateHumanoid.BreakJointsOnDeath=false
+            duplicateHumanoid.DisplayDistanceType=Enum.HumanoidDisplayDistanceType.None
+        end
+        -- Remove physical joints only from the cosmetic replica; parts follow the live rig by CFrame.
+        for _,object in ipairs(model:GetDescendants()) do if object:IsA("JointInstance") or object:IsA("WeldConstraint") then object:Destroy() end end
+        restoreCosmetic()
+        replica,replicaCharacter,mappings=model,character,bindings
+        model.Name="ZyonLocalAppearance"
+        for _,part in ipairs(character:GetDescendants()) do rememberPart(part) end
+        appearanceConnection=character.DescendantAdded:Connect(rememberPart)
+        model.Parent=Workspace.CurrentCamera
+        updateCosmetic(Workspace.CurrentCamera)
+        catalogStatus.Text="Aparencia local aplicada. Use terceira pessoa para ver."
+    end)
+    connect(restoreButton.Activated,function()
+        generation=generation+1; busy=false
+        restoreCosmetic()
+        if currentDescription then currentDescription:Destroy(); currentDescription=nil end
+        if previewModel then previewModel:Destroy(); previewModel=nil end
+        catalogStatus.Text="Aparencia original restaurada."
+    end)
+    connect(LocalPlayer.CharacterRemoving,function()
+        generation=generation+1; busy=false
+        restoreCosmetic()
+        if not stopped then catalogStatus.Text="Personagem mudou. Aplique a previa novamente apos renascer." end
+    end)
+    connect(gui.Destroying,function()
+        generation=generation+1
+        restoreCosmetic()
+        if currentDescription then currentDescription:Destroy(); currentDescription=nil end
+    end)
+end
+
 
 refreshUI = function()
     accent = themes[Config.Theme] or themes.Azul
@@ -356,6 +645,8 @@ end
 local function cleanup()
     if stopped then return end
     stopped = true
+    if restoreCosmetic then restoreCosmetic() end
+    for _, entry in pairs(entries) do entry.highlight:Destroy() end
     RunService:UnbindFromRenderStep(binding)
     for _, connection in ipairs(connections) do connection:Disconnect() end
     table.clear(connections)
@@ -406,13 +697,24 @@ local function addPlayer(player)
         Size = UDim2.new(1, -2, 1, -2), BackgroundColor3 = Color3.fromRGB(80, 235, 110),
         BorderSizePixel = 0,
     }, healthBack)
-    entries[player] = {box = box, outline = outline, label = label, health = health,
+    local segments = {}
+    for i = 1, 8 do segments[i] = make("Frame", {BorderSizePixel = 0, BackgroundColor3 = accent}, box) end
+    local below = make("TextLabel", {Position = UDim2.new(0.5, 0, 1, 4), AnchorPoint = Vector2.new(0.5, 0),
+        Size = UDim2.fromOffset(160, 18), BackgroundTransparency = 1, TextColor3 = white,
+        Font = Enum.Font.Gotham, TextSize = 11, TextStrokeTransparency = 0.2}, box)
+    local hpLabel = make("TextLabel", {Size = UDim2.fromOffset(55, 18), BackgroundTransparency = 1,
+        TextColor3 = white, Font = Enum.Font.Code, TextSize = 11, TextStrokeTransparency = 0.2}, box)
+    local highlight = make("Highlight", {Enabled = false, FillTransparency = 0.87, OutlineTransparency = 0.12,
+        DepthMode = Enum.HighlightDepthMode.AlwaysOnTop}, Workspace.CurrentCamera or Workspace)
+    local skeleton = make("Frame", {Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Visible = false}, overlay)
+    entries[player] = {segments = segments, below = below, hpLabel = hpLabel, highlight = highlight,
+        skeleton = skeleton, bones = {}, joints = {}, nextVisibility = 0, isVisible = false, box = box, outline = outline, label = label, health = health,
         healthBack = healthBack, body = {}, character = nil, nextBodyUpdate = 0}
 end
 connect(Players.PlayerAdded, addPlayer)
 connect(Players.PlayerRemoving, function(player)
     local entry = entries[player]
-    if entry then entry.box:Destroy(); entries[player] = nil end
+    if entry then entry.box:Destroy(); entry.skeleton:Destroy(); entry.highlight:Destroy(); entries[player] = nil end
     if selected == player then resetAim() end
 end)
 for _, player in ipairs(Players:GetPlayers()) do addPlayer(player) end
@@ -457,12 +759,25 @@ local function drawESP(entry, character, humanoid, camera, distance, player, now
     if not Config.ESP then entry.box.Visible = false; return end
     if entry.character ~= character or now >= entry.nextBodyUpdate then
         entry.character, entry.nextBodyUpdate, entry.body = character, now + 0.5, {}
+        entry.joints = {}
+        for _, joint in ipairs(character:GetDescendants()) do
+            if joint:IsA("Motor6D") and joint.Part0 and joint.Part1
+                and joint.Part0.Parent == character and joint.Part1.Parent == character then
+                table.insert(entry.joints, joint)
+            end
+        end
         for _, part in ipairs(character:GetChildren()) do
             if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
                 table.insert(entry.body, part)
             end
         end
     end
+    if now >= entry.nextVisibility then
+        entry.nextVisibility = now + 0.1
+        local head = character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart")
+        entry.isVisible = head and visible(camera, character, head.Position) or false
+    end
+    if Config.ESPVisibleOnly and not entry.isVisible then return end
     local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
     for _, part in ipairs(entry.body) do
         if part.Parent == character then
@@ -483,12 +798,54 @@ local function drawESP(entry, character, humanoid, camera, distance, player, now
     entry.box.Position = UDim2.fromOffset(minX, minY)
     entry.box.Size = UDim2.fromOffset(width, height)
     entry.box.Visible = true
-    entry.outline.Color = selected == player and targetColor or accent
+    local color = selected == player and targetColor or entry.isVisible and accent or accent:Lerp(muted, 0.55)
+    entry.outline.Color, entry.outline.Thickness = color, Config.ESPThickness
+    entry.outline.Enabled = Config.BoxStyle == "Completa"
+    local length, thick = math.min(width, height) * 0.24, Config.ESPThickness
+    local geometry = {{0,0,length,thick},{0,0,thick,length},{width-length,0,length,thick},{width-thick,0,thick,length},
+        {0,height-thick,length,thick},{0,height-length,thick,length},{width-length,height-thick,length,thick},{width-thick,height-length,thick,length}}
+    for i, segment in ipairs(entry.segments) do
+        local g = geometry[i]
+        segment.Visible = Config.BoxStyle == "Cantos"
+        segment.Position, segment.Size = UDim2.fromOffset(g[1],g[2]), UDim2.fromOffset(g[3],g[4])
+        segment.BackgroundColor3 = color
+    end
+    entry.highlight.Parent, entry.highlight.Adornee = camera, character
+    entry.highlight.Enabled = Config.ESPHighlight
+    entry.highlight.FillColor, entry.highlight.OutlineColor = color, color
+    entry.skeleton.Visible = Config.ESPSkeleton
+    for _, bone in ipairs(entry.bones) do bone.Visible = false end
+    if Config.ESPSkeleton then
+        for i, joint in ipairs(entry.joints) do
+            local a, b = joint.Part0, joint.Part1
+            if a and b then
+                local p, pOn = camera:WorldToViewportPoint(a.Position)
+                local q, qOn = camera:WorldToViewportPoint(b.Position)
+                if pOn and qOn and p.Z > 0 and q.Z > 0 then
+                    local line = entry.bones[i]
+                    if not line then
+                        line = make("Frame", {AnchorPoint = Vector2.new(0.5,0.5), BorderSizePixel = 0}, entry.skeleton)
+                        entry.bones[i] = line
+                    end
+                    local delta = Vector2.new(q.X-p.X,q.Y-p.Y)
+                    line.Position = UDim2.fromOffset((p.X+q.X)/2,(p.Y+q.Y)/2)
+                    line.Size = UDim2.fromOffset(delta.Magnitude, Config.ESPThickness)
+                    line.Rotation = math.deg(math.atan2(delta.Y,delta.X))
+                    line.BackgroundColor3, line.Visible = color, true
+                end
+            end
+        end
+    end
     local ratio = math.clamp(humanoid.Health / math.max(1, humanoid.MaxHealth), 0, 1)
     entry.healthBack.Position = Config.HealthSide == "Right" and UDim2.new(1, 4, 0, -1) or UDim2.fromOffset(-7, -1)
     entry.health.Size = UDim2.new(1, -2, 0, height * ratio)
     entry.health.BackgroundColor3 = Color3.fromHSV(ratio / 3, 0.8, 1)
-    entry.label.Text = string.format("%s  %d HP  %d st", player.DisplayName, math.ceil(humanoid.Health), math.floor(distance))
+    entry.label.Text, entry.label.Visible = player.DisplayName, Config.ESPNames
+    entry.below.Text, entry.below.Visible = string.format("%d st", math.floor(distance)), Config.ESPDistance
+    entry.hpLabel.Text, entry.hpLabel.Visible = tostring(math.ceil(humanoid.Health)), Config.ESPHealthText
+    entry.hpLabel.Position = Config.HealthSide == "Right" and UDim2.new(1, 9, 0, height*(1-ratio)-8)
+        or UDim2.fromOffset(-62, height*(1-ratio)-8)
+    entry.hpLabel.TextColor3 = entry.health.BackgroundColor3
 end
 
 local function steer(camera, part, center, dt, now)
@@ -611,19 +968,19 @@ local function frame(deltaTime)
         and not Input:IsKeyDown(Enum.KeyCode.LeftAlt) and not Input:IsKeyDown(Enum.KeyCode.RightAlt)
     if not active then resetAim() end
     params.FilterDescendantsInstances = localCharacter and {localCharacter, camera} or {camera}
-    local now, candidates, validCount = os.clock(), {}, 0
+    local now, candidates, validCount, drawList = os.clock(), {}, 0, {}
     for player, entry in pairs(entries) do
         local character = player.Character
         local humanoid = character and character:FindFirstChildOfClass("Humanoid")
         local root = character and (character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Head"))
-        entry.box.Visible = false
+        entry.box.Visible, entry.skeleton.Visible, entry.highlight.Enabled = false, false, false
         if focused and character and character:IsDescendantOf(Workspace) and humanoid and humanoid.Health > 0
             and root and root:IsA("BasePart") and not isExcluded(player) then
             local distance = (root.Position - camera.CFrame.Position).Magnitude
-            if distance <= Config.MaxDistance then
+            if distance <= math.max(Config.MaxDistance, Config.ESPDistanceLimit) then
                 validCount = validCount + 1
-                drawESP(entry, character, humanoid, camera, distance, player, now)
-                local part = active and targetPart(character)
+                if distance <= Config.ESPDistanceLimit then table.insert(drawList, {entry, character, humanoid, distance, player}) end
+                local part = active and distance <= Config.MaxDistance and targetPart(character)
                 if part and not character:FindFirstChildOfClass("ForceField") then
                     local point, onScreen = camera:WorldToViewportPoint(part.Position)
                     local radius = (Vector2.new(point.X, point.Y) - center).Magnitude
@@ -654,6 +1011,8 @@ local function frame(deltaTime)
         resetAim()
     end
     updateFire(active, choice, camera, center, now)
+    for _, data in ipairs(drawList) do drawESP(data[1], data[2], data[3], camera, data[4], data[5], now) end
+    if updateCosmetic then updateCosmetic(camera) end
     if now - lastStatus > 0.25 then
         lastStatus = now
         status.Text = string.format("%d personagens  /  %s", validCount, fireState)
