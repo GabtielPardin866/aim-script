@@ -14,6 +14,7 @@ local Config = {
     ESPThickness = 1.5,
     ESPDistanceLimit = 1200,
     CatalogKind = "Item",
+    CatalogRig = "R15",
 
     Aim = true,
     Enabled = true,
@@ -348,10 +349,13 @@ card("Aparencia", "Janela adaptavel", "Arraste o cabecalho. O tamanho se ajusta 
 do
     local Marketplace = game:GetService("MarketplaceService")
     local Assets = game:GetService("AssetService")
-    local currentDescription, previewModel, previewRig
+    local currentDescription, previewModel
+    local equippedTemplate, rigGraph
+    local respawnToken = 0
     local generation, busy = 0, false
     local replica, replicaCharacter, mappings, hidden = nil, nil, {}, {}
     local appearanceConnection
+    choice("Visual", "Corpo do catalogo", "R15 preserva pacotes modernos; R6 para avatares classicos.", "CatalogRig", {"R15", "R6"})
     choice("Visual", "Tipo de ID", "Links identificam o tipo automaticamente.", "CatalogKind", {"Item", "Pacote", "Avatar"})
     local inputCard = card("Visual", "Item ou skin do catalogo", "Cole um link Roblox ou um ID numerico.", 105)
     local catalogInput = round(make("TextBox", {
@@ -375,7 +379,7 @@ do
         UDim2.fromOffset(14,286), UDim2.new(1,-28,0,42), 11, muted)
     catalogStatus.TextWrapped = true
     catalogStatus.TextTruncate = Enum.TextTruncate.None
-    local actionCard = card("Visual", "Aplicar e restaurar", "Troca local, com restauracao ao renascer ou encerrar.", 108)
+    local actionCard = card("Visual", "Aplicar e restaurar", "Mantem apos morrer. Remover avatar desfaz a troca.", 108)
     local function action(label, x, width)
         local object = round(make("TextButton", {Position=UDim2.new(x,8,0,63), Size=UDim2.new(width,-16,0,30),
             BackgroundColor3=background, Text=label, Font=Enum.Font.GothamMedium, TextSize=11,
@@ -385,7 +389,7 @@ do
     end
     local loadButton = action("Carregar previa",0,0.34)
     local applyButton = action("Aplicar local",0.34,0.33)
-    local restoreButton = action("Restaurar",0.67,0.33)
+    local restoreButton = action("Remover avatar",0.67,0.33)
 
     restoreCosmetic = function()
         if appearanceConnection then appearanceConnection:Disconnect(); appearanceConnection=nil end
@@ -393,49 +397,50 @@ do
         for part, transparency in pairs(hidden) do
             if part.Parent then part.LocalTransparencyModifier=transparency end
         end
-        hidden, mappings, replicaCharacter = {}, {}, nil
+        hidden, mappings, replicaCharacter, rigGraph = {}, {}, nil, nil
     end
     local function rememberPart(part)
         if part:IsA("BasePart") and not part:FindFirstAncestorOfClass("Tool") and hidden[part] == nil then
             hidden[part]=part.LocalTransparencyModifier
         end
     end
+    local function standingHeight(character, humanoid, root)
+        local leg=humanoid.RigType==Enum.HumanoidRigType.R6 and character:FindFirstChild("Left Leg")
+        return root.Size.Y*0.5+humanoid.HipHeight+(leg and leg.Size.Y or 0)
+    end
     updateCosmetic = function(camera)
-        if not replica then return end
-        if replicaCharacter ~= LocalPlayer.Character or not replicaCharacter.Parent then restoreCosmetic(); return end
-        replica.Parent=camera
-        -- Hide replica in first person so it cannot obstruct the weapon camera.
-        local head=replicaCharacter:FindFirstChild("Head")
-        local firstPerson=head and (camera.CFrame.Position-head.Position).Magnitude < 1.2
-        for _, binding in ipairs(mappings) do
-            if binding.source.Parent and binding.part.Parent then
-                local part,source=binding.part,binding.source
-                -- Only replica parts are written; the gameplay body's size and physics are read-only.
-                part.Anchored=true
-                part.CanCollide=false
-                part.CanTouch=false
-                part.CanQuery=false
-                part.Massless=true
-                local offset=binding.offset
-                if binding.isBody then
-                    part.Size=source.Size
-                    if binding.mesh and binding.mesh.Parent then
-                        binding.mesh.Scale=binding.meshScale*(source.Size/binding.templateSize)
-                    end
-                elseif binding.liveAttachment and binding.liveAttachment.Parent
-                    and binding.localAttachment and binding.localAttachment.Parent then
-                    offset=binding.liveAttachment.CFrame*binding.localAttachment.CFrame:Inverse()
-                elseif binding.templateBodySize then
-                    -- Legacy accessories without matching attachments follow the original body's proportions.
-                    offset=CFrame.new(binding.offset.Position*(source.Size/binding.templateBodySize))*binding.offset.Rotation
-                end
-                part.CFrame=source.CFrame*offset
-                binding.part.LocalTransparencyModifier=firstPerson and 1 or 0
+        if not replica or not rigGraph then return end
+        local character=LocalPlayer.Character
+        local root=character and character:FindFirstChild("HumanoidRootPart")
+        local humanoid=character and character:FindFirstChildOfClass("Humanoid")
+        if replicaCharacter~=character or not root or not humanoid then restoreCosmetic(); return end
+        local head=character:FindFirstChild("Head")
+        local firstPerson=head and (camera.CFrame.Position-head.Position).Magnitude<1.2
+        -- Align standing ground levels without changing either model's proportions or live HipHeight.
+        local heightOffset=rigGraph.height-standingHeight(character,humanoid,root)
+        rigGraph.root.CFrame=root.CFrame+Vector3.new(0,heightOffset,0)
+        for _,edge in ipairs(rigGraph.edges) do
+            local transform=CFrame.new()
+            local joint=edge.source
+            if joint and joint.Parent and joint.Part0 and joint.Part1 then
+                -- Recover the animated relative rotation, not the live character's limb positions/sizes.
+                transform=(joint.C0:Inverse()*joint.Part0.CFrame:ToObjectSpace(joint.Part1.CFrame)*joint.C1).Rotation
+            end
+            local relative=edge.c0*transform*edge.c1:Inverse()
+            edge.child.CFrame=edge.parent.CFrame*(edge.reverse and relative:Inverse() or relative)
+        end
+        for _,binding in ipairs(mappings) do
+            local part=binding.part
+            if part.Parent then
+                if binding.fallback then part.CFrame=rigGraph.root.CFrame*binding.fallback end
+                part.Anchored=true; part.CanCollide=false; part.CanTouch=false; part.CanQuery=false
+                part.LocalTransparencyModifier=firstPerson and 1 or 0
             end
         end
         for part in pairs(hidden) do
             if part.Parent then part.LocalTransparencyModifier=1 else hidden[part]=nil end
         end
+        replica.Parent=camera
     end
     local numericFields = {
         [2]="GraphicTShirt",[11]="Shirt",[12]="Pants",[18]="Face",[17]="Head",
@@ -489,6 +494,7 @@ do
         generation=generation+1
         local token=generation
         local requestedText=catalogInput.Text
+        local requestedRig=Enum.HumanoidRigType[Config.CatalogRig]
         busy=true
         catalogStatus.Text="Consultando catalogo e carregando aparencia..."
         task.spawn(function()
@@ -513,8 +519,8 @@ do
                         end
                     else name=addAsset(description,id,false) end
                 end
-                -- Match the gameplay rig type; this operation creates a new local model.
-                model=Players:CreateHumanoidModelFromDescriptionAsync(description,humanoid.RigType)
+                -- Keep the catalog rig independent from the live gameplay rig.
+                model=Players:CreateHumanoidModelFromDescriptionAsync(description,requestedRig)
                 for _,object in ipairs(model:GetDescendants()) do
                     if object:IsA("BaseScript") or object:IsA("ModuleScript") then object:Destroy()
                     elseif object:IsA("BasePart") then
@@ -539,7 +545,7 @@ do
             end
             if previewModel then previewModel:Destroy() end
             if currentDescription then currentDescription:Destroy() end
-            currentDescription,previewModel,previewRig=description,model,humanoid.RigType
+            currentDescription,previewModel=description,model
             model.Parent=world
             local bounds,size=model:GetBoundingBox()
             local distance=math.max(size.X,size.Y,size.Z)*2.2
@@ -549,100 +555,119 @@ do
     end
     connect(loadButton.Activated,loadPreview)
     connect(catalogInput.FocusLost,function(enter) if enter then loadPreview() end end)
-    connect(applyButton.Activated,function()
-        if busy or not previewModel then catalogStatus.Text="Carregue uma previa primeiro."; return end
-        if not Workspace.CurrentCamera then catalogStatus.Text="Aguarde a camera do jogo."; return end
-        local character=LocalPlayer.Character
-        local humanoid=character and character:FindFirstChildOfClass("Humanoid")
-        if not humanoid or humanoid.RigType~=previewRig then catalogStatus.Text="Rig mudou. Recarregue a previa."; return end
-        local model=previewModel:Clone()
-        local bindings={}
-        local headMapped,torsoMapped=false,false
-        for _,part in ipairs(model:GetDescendants()) do
-            if part:IsA("BasePart") then
-                local source,offset,templateBodySize,liveAttachment,localAttachment
-                local isBody=part.Parent==model
-                if part.Parent==model then
-                    source=character:FindFirstChild(part.Name)
-                    offset=CFrame.new()
-                else
-                    local weld=part:FindFirstChild("AccessoryWeld")
-                    local body=weld and weld:IsA("Weld") and weld.Part1
-                    if body and body.Parent==model then
-                        source=character:FindFirstChild(body.Name)
-                        offset=body.CFrame:ToObjectSpace(part.CFrame)
-                        templateBodySize=body.Size
-                        if source then
-                            for _,attachment in ipairs(part:GetChildren()) do
-                                if attachment:IsA("Attachment") then
-                                    local matching=source:FindFirstChild(attachment.Name)
-                                    if matching and matching:IsA("Attachment") then
-                                        liveAttachment,localAttachment=matching,attachment
-                                        break
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-                if source and source:IsA("BasePart") then
-                    local mesh=isBody and part:FindFirstChildOfClass("SpecialMesh") or nil
-                    table.insert(bindings,{part=part,source=source,offset=offset,isBody=isBody,
-                        templateSize=part.Size,templateBodySize=templateBodySize,
-                        liveAttachment=liveAttachment,localAttachment=localAttachment,
-                        mesh=mesh,meshScale=mesh and mesh.Scale or nil})
-                    if part.Name=="Head" and part.Parent==model then headMapped=true end
-                    if (part.Name=="Torso" or part.Name=="UpperTorso") and part.Parent==model then torsoMapped=true end
-                else part.Transparency=1 end
+    local function mountTemplate(template,character)
+        local sourceRoot=character:FindFirstChild("HumanoidRootPart")
+        local humanoid=character:FindFirstChildOfClass("Humanoid")
+        if not sourceRoot or not humanoid or not Workspace.CurrentCamera then return false end
+        local model=template:Clone()
+        local root=model:FindFirstChild("HumanoidRootPart")
+        local visualHumanoid=model:FindFirstChildOfClass("Humanoid")
+        if not root or not visualHumanoid then model:Destroy(); return false end
+        local height=standingHeight(model,visualHumanoid,root)
+        local sourceByChild={}
+        for _,joint in ipairs(character:GetDescendants()) do
+            if joint:IsA("Motor6D") and joint.Part1 and joint.Part1.Parent==character then
+                sourceByChild[joint.Part1.Name]=joint
             end
         end
-        if not headMapped or not torsoMapped then model:Destroy(); catalogStatus.Text="Rig do jogo incompativel com a copia visual."; return end
-        -- A second Humanoid can manage collision/state on its own. The applied replica is geometry only.
-        -- Preview retains its rig; stripping occurs exclusively on the new clone before parenting it.
-        for _,object in ipairs(model:GetDescendants()) do
-            if object:IsA("Humanoid") then
-                object.RequiresNeck=false
-                object.BreakJointsOnDeath=false
-                object:Destroy()
-            elseif object:IsA("Animator") or object:IsA("AnimationController")
-                or object:IsA("JointInstance") or object:IsA("Constraint")
-                or object:IsA("WeldConstraint") or object:IsA("BodyMover")
-                or object:IsA("BaseScript") or object:IsA("ModuleScript") then
-                object:Destroy()
-            elseif object:IsA("BasePart") then
-                object.Anchored=true
-                object.CanCollide=false
-                object.CanTouch=false
-                object.CanQuery=false
-                object.Massless=true
+        -- Cross-rig mapping transfers major joints; unmatched joints keep the catalog rest pose.
+        local alternate={UpperTorso="Torso",LowerTorso="Torso",LeftUpperArm="Left Arm",RightUpperArm="Right Arm",
+            LeftUpperLeg="Left Leg",RightUpperLeg="Right Leg",Torso="LowerTorso",
+            ["Left Arm"]="LeftUpperArm",["Right Arm"]="RightUpperArm",
+            ["Left Leg"]="LeftUpperLeg",["Right Leg"]="RightUpperLeg"}
+        local adjacency={}
+        local function addEdge(part,edge)
+            adjacency[part]=adjacency[part] or {}; table.insert(adjacency[part],edge)
+        end
+        for _,joint in ipairs(model:GetDescendants()) do
+            if joint:IsA("JointInstance") and joint.Part0 and joint.Part1 then
+                local p0,p1=joint.Part0,joint.Part1
+                local source
+                if joint:IsA("Motor6D") then
+                    source=sourceByChild[p1.Name] or sourceByChild[alternate[p1.Name]]
+                    -- Do not apply the same R6 torso rotation twice along an R15 spine.
+                    if p1.Name=="UpperTorso" and not sourceByChild.UpperTorso then source=nil end
+                end
+                addEdge(p0,{parent=p0,child=p1,c0=joint.C0,c1=joint.C1,source=source})
+                addEdge(p1,{parent=p1,child=p0,c0=joint.C0,c1=joint.C1,source=source,reverse=true})
             end
+        end
+        local visited,queue,edges={[root]=true},{root},{}
+        local index=1
+        while index<=#queue do
+            local parent=queue[index]; index=index+1
+            for _,edge in ipairs(adjacency[parent] or {}) do
+                if not visited[edge.child] then
+                    visited[edge.child]=true; table.insert(queue,edge.child); table.insert(edges,edge)
+                end
+            end
+        end
+        local bindings={}
+        for _,object in ipairs(model:GetDescendants()) do
+            if object:IsA("BasePart") then
+                -- No Size or mesh Scale assignments: catalog geometry is preserved verbatim.
+                table.insert(bindings,{part=object,fallback=not visited[object] and root.CFrame:ToObjectSpace(object.CFrame) or nil})
+                object.Anchored=true; object.CanCollide=false; object.CanTouch=false; object.CanQuery=false; object.Massless=true
+            end
+        end
+        visualHumanoid.RequiresNeck=false; visualHumanoid.BreakJointsOnDeath=false
+        for _,object in ipairs(model:GetDescendants()) do
+            if object:IsA("Humanoid") or object:IsA("Animator") or object:IsA("AnimationController")
+                or object:IsA("JointInstance") or object:IsA("Constraint") or object:IsA("WeldConstraint")
+                or object:IsA("BodyMover") or object:IsA("BaseScript") or object:IsA("ModuleScript") then object:Destroy() end
         end
         restoreCosmetic()
         replica,replicaCharacter,mappings=model,character,bindings
+        rigGraph={root=root,height=height,edges=edges}
         model.Name="ZyonLocalAppearance"
         for _,part in ipairs(character:GetDescendants()) do rememberPart(part) end
         appearanceConnection=character.DescendantAdded:Connect(rememberPart)
-        -- Position the geometry before it enters the scene; never spawn a visible replica at origin.
-        for _,binding in ipairs(bindings) do
-            if binding.isBody then binding.part.Size=binding.source.Size end
-            binding.part.CFrame=binding.source.CFrame*binding.offset
-        end
         updateCosmetic(Workspace.CurrentCamera)
-        catalogStatus.Text="Visual aplicado ao corpo original. Hitbox e altura do jogo preservadas."
+        return true
+    end
+    connect(applyButton.Activated,function()
+        if busy or not previewModel then catalogStatus.Text="Carregue uma previa primeiro."; return end
+        local character=LocalPlayer.Character
+        if not character or not mountTemplate(previewModel,character) then
+            catalogStatus.Text="Aguarde o personagem e a camera ficarem prontos."; return
+        end
+        respawnToken=respawnToken+1
+        if equippedTemplate then equippedTemplate:Destroy() end
+        equippedTemplate=previewModel:Clone()
+        catalogStatus.Text="Avatar aplicado com proporcoes do catalogo. Mantido apos morrer."
     end)
     connect(restoreButton.Activated,function()
-        generation=generation+1; busy=false
+        generation=generation+1; busy=false; respawnToken=respawnToken+1
+        if equippedTemplate then equippedTemplate:Destroy(); equippedTemplate=nil end
         restoreCosmetic()
-        if currentDescription then currentDescription:Destroy(); currentDescription=nil end
-        if previewModel then previewModel:Destroy(); previewModel=nil end
-        catalogStatus.Text="Aparencia original restaurada."
+        catalogStatus.Text="Avatar removido. Nao sera reaplicado ao renascer."
     end)
     connect(LocalPlayer.CharacterRemoving,function()
-        generation=generation+1; busy=false
+        generation=generation+1; busy=false; respawnToken=respawnToken+1
         restoreCosmetic()
-        if not stopped then catalogStatus.Text="Personagem mudou. Aplique a previa novamente apos renascer." end
+        if not stopped then catalogStatus.Text=equippedTemplate and "Aguardando renascer para reaplicar o avatar." or "Aparencia original ativa." end
+    end)
+    connect(LocalPlayer.CharacterAdded,function(character)
+        respawnToken=respawnToken+1
+        local token=respawnToken
+        task.spawn(function()
+            for _=1,40 do
+                if stopped or token~=respawnToken or LocalPlayer.Character~=character or not equippedTemplate then return end
+                local humanoid=character:FindFirstChildOfClass("Humanoid")
+                if humanoid and humanoid.Health>0 and character:FindFirstChild("Head") and character:FindFirstChild("HumanoidRootPart") then
+                    if mountTemplate(equippedTemplate,character) then
+                        catalogStatus.Text="Avatar reaplicado apos renascer."
+                        return
+                    end
+                end
+                task.wait(0.5)
+            end
+            if not stopped and token==respawnToken then catalogStatus.Text="Personagem demorou para carregar. Use Aplicar local." end
+        end)
     end)
     connect(gui.Destroying,function()
+        respawnToken=respawnToken+1
+        if equippedTemplate then equippedTemplate:Destroy(); equippedTemplate=nil end
         generation=generation+1
         restoreCosmetic()
         if currentDescription then currentDescription:Destroy(); currentDescription=nil end
