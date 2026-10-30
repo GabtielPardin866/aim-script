@@ -409,7 +409,27 @@ do
         local firstPerson=head and (camera.CFrame.Position-head.Position).Magnitude < 1.2
         for _, binding in ipairs(mappings) do
             if binding.source.Parent and binding.part.Parent then
-                binding.part.CFrame=binding.source.CFrame*binding.offset
+                local part,source=binding.part,binding.source
+                -- Only replica parts are written; the gameplay body's size and physics are read-only.
+                part.Anchored=true
+                part.CanCollide=false
+                part.CanTouch=false
+                part.CanQuery=false
+                part.Massless=true
+                local offset=binding.offset
+                if binding.isBody then
+                    part.Size=source.Size
+                    if binding.mesh and binding.mesh.Parent then
+                        binding.mesh.Scale=binding.meshScale*(source.Size/binding.templateSize)
+                    end
+                elseif binding.liveAttachment and binding.liveAttachment.Parent
+                    and binding.localAttachment and binding.localAttachment.Parent then
+                    offset=binding.liveAttachment.CFrame*binding.localAttachment.CFrame:Inverse()
+                elseif binding.templateBodySize then
+                    -- Legacy accessories without matching attachments follow the original body's proportions.
+                    offset=CFrame.new(binding.offset.Position*(source.Size/binding.templateBodySize))*binding.offset.Rotation
+                end
+                part.CFrame=source.CFrame*offset
                 binding.part.LocalTransparencyModifier=firstPerson and 1 or 0
             end
         end
@@ -540,7 +560,8 @@ do
         local headMapped,torsoMapped=false,false
         for _,part in ipairs(model:GetDescendants()) do
             if part:IsA("BasePart") then
-                local source,offset
+                local source,offset,templateBodySize,liveAttachment,localAttachment
+                local isBody=part.Parent==model
                 if part.Parent==model then
                     source=character:FindFirstChild(part.Name)
                     offset=CFrame.new()
@@ -550,32 +571,64 @@ do
                     if body and body.Parent==model then
                         source=character:FindFirstChild(body.Name)
                         offset=body.CFrame:ToObjectSpace(part.CFrame)
+                        templateBodySize=body.Size
+                        if source then
+                            for _,attachment in ipairs(part:GetChildren()) do
+                                if attachment:IsA("Attachment") then
+                                    local matching=source:FindFirstChild(attachment.Name)
+                                    if matching and matching:IsA("Attachment") then
+                                        liveAttachment,localAttachment=matching,attachment
+                                        break
+                                    end
+                                end
+                            end
+                        end
                     end
                 end
                 if source and source:IsA("BasePart") then
-                    table.insert(bindings,{part=part,source=source,offset=offset})
+                    local mesh=isBody and part:FindFirstChildOfClass("SpecialMesh") or nil
+                    table.insert(bindings,{part=part,source=source,offset=offset,isBody=isBody,
+                        templateSize=part.Size,templateBodySize=templateBodySize,
+                        liveAttachment=liveAttachment,localAttachment=localAttachment,
+                        mesh=mesh,meshScale=mesh and mesh.Scale or nil})
                     if part.Name=="Head" and part.Parent==model then headMapped=true end
                     if (part.Name=="Torso" or part.Name=="UpperTorso") and part.Parent==model then torsoMapped=true end
                 else part.Transparency=1 end
             end
         end
         if not headMapped or not torsoMapped then model:Destroy(); catalogStatus.Text="Rig do jogo incompativel com a copia visual."; return end
-        local duplicateHumanoid=model:FindFirstChildOfClass("Humanoid")
-        if duplicateHumanoid then
-            duplicateHumanoid.RequiresNeck=false
-            duplicateHumanoid.BreakJointsOnDeath=false
-            duplicateHumanoid.DisplayDistanceType=Enum.HumanoidDisplayDistanceType.None
+        -- A second Humanoid can manage collision/state on its own. The applied replica is geometry only.
+        -- Preview retains its rig; stripping occurs exclusively on the new clone before parenting it.
+        for _,object in ipairs(model:GetDescendants()) do
+            if object:IsA("Humanoid") then
+                object.RequiresNeck=false
+                object.BreakJointsOnDeath=false
+                object:Destroy()
+            elseif object:IsA("Animator") or object:IsA("AnimationController")
+                or object:IsA("JointInstance") or object:IsA("Constraint")
+                or object:IsA("WeldConstraint") or object:IsA("BodyMover")
+                or object:IsA("BaseScript") or object:IsA("ModuleScript") then
+                object:Destroy()
+            elseif object:IsA("BasePart") then
+                object.Anchored=true
+                object.CanCollide=false
+                object.CanTouch=false
+                object.CanQuery=false
+                object.Massless=true
+            end
         end
-        -- Remove physical joints only from the cosmetic replica; parts follow the live rig by CFrame.
-        for _,object in ipairs(model:GetDescendants()) do if object:IsA("JointInstance") or object:IsA("WeldConstraint") then object:Destroy() end end
         restoreCosmetic()
         replica,replicaCharacter,mappings=model,character,bindings
         model.Name="ZyonLocalAppearance"
         for _,part in ipairs(character:GetDescendants()) do rememberPart(part) end
         appearanceConnection=character.DescendantAdded:Connect(rememberPart)
-        model.Parent=Workspace.CurrentCamera
+        -- Position the geometry before it enters the scene; never spawn a visible replica at origin.
+        for _,binding in ipairs(bindings) do
+            if binding.isBody then binding.part.Size=binding.source.Size end
+            binding.part.CFrame=binding.source.CFrame*binding.offset
+        end
         updateCosmetic(Workspace.CurrentCamera)
-        catalogStatus.Text="Aparencia local aplicada. Use terceira pessoa para ver."
+        catalogStatus.Text="Visual aplicado ao corpo original. Hitbox e altura do jogo preservadas."
     end)
     connect(restoreButton.Activated,function()
         generation=generation+1; busy=false
