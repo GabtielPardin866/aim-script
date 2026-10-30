@@ -349,7 +349,7 @@ card("Aparencia", "Janela adaptavel", "Arraste o cabecalho. O tamanho se ajusta 
 do
     local Marketplace = game:GetService("MarketplaceService")
     local Assets = game:GetService("AssetService")
-    local currentDescription, previewModel
+    local currentDescription, previewModel, previewSelection
     local equippedTemplate
     local respawnToken = 0
     local generation, busy = 0, false
@@ -452,9 +452,9 @@ do
         elseif not skipUnknown then error("Tipo de item nao suportado no provador: "..tostring(kind)) end
         return info.Name or tostring(id)
     end
-    local function parseID(text)
+    local function parseID(text,defaultKind)
         text=string.match(text,"^%s*(.-)%s*$")
-        local kind,id=Config.CatalogKind,string.match(text,"^(%d+)$")
+        local kind,id=defaultKind or Config.CatalogKind,string.match(text,"^(%d+)$")
         if not id then
             local host=string.match(string.lower(text),"^https?://([^/]+)")
             assert(host=="www.roblox.com" or host=="roblox.com","Use ID numerico ou link de roblox.com.")
@@ -476,13 +476,15 @@ do
         generation=generation+1
         local token=generation
         local requestedText=catalogInput.Text
+        local requestedKind,requestedRigSetting=Config.CatalogKind,Config.CatalogRig
         local requestedRig=Config.CatalogRig=="Do jogo" and humanoid.RigType or Enum.HumanoidRigType[Config.CatalogRig]
+        previewSelection=nil
         busy=true
         catalogStatus.Text="Consultando catalogo e carregando aparencia..."
         task.spawn(function()
             local model,description
             local ok,result=pcall(function()
-                local id,kind=parseID(requestedText)
+                local id,kind=parseID(requestedText,requestedKind)
                 local name=tostring(id)
                 if kind=="Avatar" then description=Players:GetHumanoidDescriptionFromUserIdAsync(id)
                 else
@@ -518,6 +520,12 @@ do
                 return
             end
             busy=false
+            if catalogInput.Text~=requestedText or Config.CatalogKind~=requestedKind or Config.CatalogRig~=requestedRigSetting then
+                if model then model:Destroy() end
+                if description then description:Destroy() end
+                catalogStatus.Text="Selecao alterada. Carregue a nova previa."
+                return
+            end
             if not ok then
                 if model then model:Destroy() end
                 if description then description:Destroy() end
@@ -528,6 +536,7 @@ do
             if previewModel then previewModel:Destroy() end
             if currentDescription then currentDescription:Destroy() end
             currentDescription,previewModel=description,model
+            previewSelection={text=requestedText,kind=requestedKind,rig=requestedRigSetting}
             model.Parent=world
             local bounds,size=model:GetBoundingBox()
             local distance=math.max(size.X,size.Y,size.Z)*2.2
@@ -536,6 +545,12 @@ do
         end)
     end
     connect(loadButton.Activated,loadPreview)
+    connect(catalogInput:GetPropertyChangedSignal("Text"),function()
+        generation=generation+1
+        busy=false
+        previewSelection=nil
+        catalogStatus.Text="Entrada alterada. Clique em Carregar previa antes de aplicar."
+    end)
     connect(catalogInput.FocusLost,function(enter) if enter then loadPreview() end end)
     local function mountTemplate(template,character)
         local sourceRoot=character:FindFirstChild("HumanoidRootPart")
@@ -591,6 +606,11 @@ do
     end
     connect(applyButton.Activated,function()
         if busy or not previewModel then catalogStatus.Text="Carregue uma previa primeiro."; return end
+        if not previewSelection or previewSelection.text~=catalogInput.Text
+            or previewSelection.kind~=Config.CatalogKind or previewSelection.rig~=Config.CatalogRig then
+            catalogStatus.Text="A previa nao corresponde a selecao atual. Carregue a nova previa."
+            return
+        end
         local character=LocalPlayer.Character
         if not character or not mountTemplate(previewModel,character) then
             catalogStatus.Text="Personagem/rig indisponivel. Use Corpo do catalogo: Do jogo e recarregue."; return
@@ -604,7 +624,11 @@ do
         generation=generation+1; busy=false; respawnToken=respawnToken+1
         if equippedTemplate then equippedTemplate:Destroy(); equippedTemplate=nil end
         restoreCosmetic()
-        catalogStatus.Text="Avatar removido. Nao sera reaplicado ao renascer."
+        if previewModel then previewModel:Destroy(); previewModel=nil end
+        if currentDescription then currentDescription:Destroy(); currentDescription=nil end
+        previewSelection=nil
+        catalogInput.Text=""
+        catalogStatus.Text="Avatar removido e previa limpa. Cole o novo link ou ID."
     end)
     connect(LocalPlayer.CharacterRemoving,function()
         generation=generation+1; busy=false; respawnToken=respawnToken+1
