@@ -160,6 +160,10 @@ end
 local minimize, maximize, close = headerButton("−",-124), headerButton("□",-84), headerButton("×",-44)
 local expanded = false
 connect(maximize.Activated,function() expanded=not expanded end)
+local dropdown
+local function closeDropdown()
+    if dropdown then dropdown:Destroy(); dropdown=nil end
+end
 local sidebar = make("Frame", {Position = UDim2.fromOffset(14, 64), Size = UDim2.fromOffset(172, 404),
     BackgroundTransparency = 1, ZIndex = 11}, panel)
 local pages, navButtons, activePage = {}, {}, "Combate"
@@ -183,22 +187,25 @@ local searchableCards = {}
 local function filterCards()
     local query = string.lower(searchBox.Text)
     for _, item in ipairs(searchableCards) do item.object.Visible = query == "" or string.find(item.search, query, 1, true) ~= nil end
+    closeDropdown()
+    for _, page in pairs(pages) do page.CanvasPosition = Vector2.zero end
 end
 connect(searchBox:GetPropertyChangedSignal("Text"), filterCards)
 local pageDescription = textLabel(panel, pageDescriptions.Combate, UDim2.fromOffset(208, 98), UDim2.fromOffset(520, 21), 12, muted)
 for index, name in ipairs({"Combate", "Disparo", "Visuais", "Visual", "Aparencia"}) do
     local nav = round(make("TextButton", {Position = UDim2.fromOffset(0, (index - 1) * 44),
         Size = UDim2.fromOffset(172, 40), BackgroundColor3 = surface, BorderSizePixel = 0,
-        Text = "       " .. name, Font = Enum.Font.GothamMedium,
+        Text = "", Font = Enum.Font.GothamMedium,
         TextSize = 13, TextColor3 = muted, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 12}, sidebar))
     make("UIPadding", {PaddingLeft = UDim.new(0, 8)}, nav)
-    local icons = {"◎", "⌁", "◉", "◇", "☼"}
-    textLabel(nav, icons[index], UDim2.fromOffset(12,9), UDim2.fromOffset(22,22),18)
-    colored(round(make("Frame", {Name="Selected",Position=UDim2.fromOffset(0,11),
+    textLabel(nav, string.format("%02d",index), UDim2.fromOffset(8,9), UDim2.fromOffset(24,22),11,muted)
+    textLabel(nav, name, UDim2.fromOffset(38,9), UDim2.fromOffset(124,22),13)
+    colored(round(make("Frame", {Name="ActiveIndicator",Position=UDim2.fromOffset(0,11),
         Size=UDim2.fromOffset(3,18),BorderSizePixel=0,ZIndex=13},nav),2),"BackgroundColor3")
     local page = make("ScrollingFrame", {Name = name, Position = UDim2.fromOffset(208, 166),
         Size = UDim2.fromOffset(530, 320), BackgroundTransparency = 1, BorderSizePixel = 0,
         CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        ScrollingDirection = Enum.ScrollingDirection.Y, ClipsDescendants = true,
         ScrollBarThickness = 3, ScrollBarImageColor3 = accent, Visible = name == activePage, ZIndex = 11}, panel)
     make("UIListLayout", {Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder}, page)
     make("UIPadding", {PaddingBottom = UDim.new(0, 6), PaddingRight = UDim.new(0, 8)}, page)
@@ -227,6 +234,7 @@ local reopen = round(make("TextButton", {Position = UDim2.new(1, -102, 0, 22), S
     TextSize = 12, TextColor3 = accent, Visible = false, ZIndex = 15}, gui), 8)
 colored(reopen, "TextColor3")
 local function setMenu(open)
+    closeDropdown()
     panel.Visible, reopen.Visible = open, not open
     held = false
     if resetAim then resetAim() end
@@ -253,7 +261,7 @@ local function changed()
 end
 local function switch(page, label, description, key)
     local object = card(page, label, description)
-    local track = round(make("TextButton", {Position = UDim2.new(1, -64, 0, 12), Size = UDim2.fromOffset(40, 20),
+    local track = round(make("TextButton", {Position = UDim2.new(1, -56, 0, 6), Size = UDim2.fromOffset(40, 20),
         BorderSizePixel = 0, Text = "", AutoButtonColor = false, ZIndex = 13}, object), 12)
     make("UIStroke", {Color=muted, Transparency=0.6, Thickness=1},track)
     local knob = round(make("Frame", {Size = UDim2.fromOffset(14, 14), BackgroundColor3 = white,
@@ -265,11 +273,13 @@ local function switch(page, label, description, key)
     end)
     connect(track.Activated, function() Config[key] = not Config[key]; changed() end)
 end
-local dropdown
-local function closeDropdown()
-    if dropdown then dropdown:Destroy(); dropdown=nil end
-end
 connect(panel:GetPropertyChangedSignal("Visible"),closeDropdown)
+connect(panel:GetPropertyChangedSignal("Position"),closeDropdown)
+connect(panelScale:GetPropertyChangedSignal("Scale"),closeDropdown)
+connect(Input.WindowFocusReleased,closeDropdown)
+for _, page in pairs(pages) do
+    connect(page:GetPropertyChangedSignal("CanvasPosition"),closeDropdown)
+end
 local function choice(page, label, description, key, values)
     local object = card(page,label,description)
     local control = round(make("TextButton", {Position=UDim2.new(1,-166,0,5),Size=UDim2.fromOffset(154,25),
@@ -281,13 +291,14 @@ local function choice(page, label, description, key, values)
         dropdown=make("TextButton",{Size=UDim2.fromScale(1,1),BackgroundTransparency=1,Text="",ZIndex=50},gui)
         dropdown.Activated:Connect(closeDropdown)
         local position=control.AbsolutePosition
-        local view=gui.AbsoluteSize
+        local view=Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1280,720)
         local height=math.min(#values*32+8,224)
         local menu=round(make("ScrollingFrame",{Position=UDim2.fromOffset(
             math.clamp(position.X,0,math.max(0,view.X-180)),
             math.clamp(position.Y+control.AbsoluteSize.Y+4,0,math.max(0,view.Y-height))),
             Size=UDim2.fromOffset(180,height),BackgroundColor3=background,BorderSizePixel=0,
-            ScrollBarThickness=3,CanvasSize=UDim2.fromOffset(0,#values*32+8),ZIndex=51},dropdown),6)
+            ScrollBarThickness=3,ScrollingDirection=Enum.ScrollingDirection.Y,
+            Active=true,CanvasSize=UDim2.fromOffset(0,#values*32+8),ZIndex=51},dropdown),6)
         make("UIStroke",{Color=muted,Transparency=0.6},menu)
         for i,v in ipairs(values) do
             local option=round(make("TextButton",{Position=UDim2.fromOffset(4,4+(i-1)*32),
@@ -300,12 +311,12 @@ local function choice(page, label, description, key, values)
 end
 local activeSlider
 local function slider(page, label, description, key, minimum, maximum, increment, suffix)
-    local object = card(page, label, description, 60)
+    local object = card(page, label, description, 82)
     local heading = object:FindFirstChildOfClass("TextLabel")
-    if heading then heading.Size = UDim2.new(1, -260, 0, 20) end
-    local value = colored(textLabel(object, "", UDim2.new(1, -241, 0, 7), UDim2.fromOffset(54, 20), 12), "TextColor3")
+    if heading then heading.Size = UDim2.new(1, -120, 0, 20) end
+    local value = colored(textLabel(object, "", UDim2.new(1, -106, 0, 7), UDim2.fromOffset(90, 20), 12), "TextColor3")
     value.TextXAlignment = Enum.TextXAlignment.Right
-    local hit = make("TextButton", {Position = UDim2.new(1, -178, 0, 7), Size = UDim2.fromOffset(162, 25),
+    local hit = make("TextButton", {Position = UDim2.fromOffset(16, 51), Size = UDim2.new(1,-32,0,25),
         BackgroundTransparency = 1, Text = "", ZIndex = 13}, object)
     local rail = round(make("Frame", {Position = UDim2.fromOffset(0, 10), Size = UDim2.new(1, 0, 0, 4),
         BackgroundColor3 = Color3.fromRGB(113, 95, 133), BorderSizePixel = 0, ZIndex = 13}, hit), 2)
@@ -705,7 +716,8 @@ refreshUI = function()
         navButtons[name].BackgroundColor3 = name == activePage and background:Lerp(accent, 0.2) or background
         navButtons[name].TextColor3 = white
         navButtons[name].BackgroundTransparency = name == activePage and 0.35 or 1
-        navButtons[name].Selected.Visible = name == activePage
+        local indicator = navButtons[name]:FindFirstChild("ActiveIndicator")
+        if indicator then indicator.Visible = name == activePage end
     end
     for _, refresh in ipairs(widgetRefreshers) do refresh() end
 end
