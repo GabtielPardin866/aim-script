@@ -1,3 +1,4 @@
+local startupOK, startupError = xpcall(function()
 -- Luau | urban-reload.lua | Roblox client, desktop | Urban Reload 84448037861644
 -- Requires an existing client-side Luau execution context; this file does not supply one.
 -- Uses standard Player.Character/Humanoid rigs. Live Urban Reload compatibility is unverified.
@@ -147,9 +148,11 @@ local panel = round(make("Frame", {
 make("UIStroke", {Color = Color3.fromRGB(112, 91, 136), Transparency = 0.65, Thickness = 1}, panel)
 local panelScale = make("UIScale", {Scale = 1}, panel)
 local panelGradient = make("UIGradient", {Enabled = false, Rotation = 35}, panel)
-local header = make("Frame", {Size = UDim2.new(1, -136, 0, 48),
+local header = make("TextButton", {Text="", AutoButtonColor=false, Size = UDim2.new(1, -136, 0, 48),
     BackgroundTransparency = 1, Active = true, ZIndex = 11}, panel)
-textLabel(header, "ZYON  /  Urban Reload", UDim2.fromOffset(20, 13), UDim2.fromOffset(420, 22), 12)
+textLabel(header, "ZYON  /  Urban Reload  /  UI 3.1", UDim2.fromOffset(20, 13), UDim2.fromOffset(420, 22), 12)
+local dragSurface = make("TextButton", {Size=UDim2.fromScale(1,1), Text="", BackgroundTransparency=1,
+    AutoButtonColor=false, Active=true, ZIndex=20},header)
 make("Frame", {Position=UDim2.fromOffset(0,48), Size=UDim2.new(1,0,0,1),
     BackgroundColor3=muted, BackgroundTransparency=0.85, BorderSizePixel=0, ZIndex=11}, panel)
 local function headerButton(label, x)
@@ -284,8 +287,8 @@ local function choice(page, label, description, key, values)
     local object = card(page,label,description)
     local control = round(make("TextButton", {Position=UDim2.new(1,-166,0,5),Size=UDim2.fromOffset(154,25),
         BackgroundColor3=surface,BackgroundTransparency=0.1,BorderSizePixel=0,TextColor3=white,
-        TextSize=11,Font=Enum.Font.Gotham,ZIndex=13},object),5)
-    table.insert(widgetRefreshers,function() control.Text=tostring(Config[key]).."    ⌄" end)
+        Text=tostring(Config[key]).."    v",TextSize=11,Font=Enum.Font.Gotham,ZIndex=13},object),5)
+    table.insert(widgetRefreshers,function() control.Text=tostring(Config[key]).."    v" end)
     connect(control.Activated,function()
         if dropdown then closeDropdown(); return end
         dropdown=make("TextButton",{Size=UDim2.fromScale(1,1),BackgroundTransparency=1,Text="",ZIndex=50},gui)
@@ -342,6 +345,43 @@ local function slider(page, label, description, key, minimum, maximum, increment
         end
     end)
 end
+refreshUI = function()
+    accent = themes[Config.Theme] or themes.Azul
+    for _, binding in ipairs(themeBindings) do binding[1][binding[2]] = accent end
+    circle:FindFirstChildOfClass("UIStroke").Color = accent
+    panelGradient.Enabled = Config.Gradient
+    panel.BackgroundColor3 = Config.Gradient and Color3.new(1, 1, 1) or background
+    panelGradient.Color = ColorSequence.new(background:Lerp(accent, 0.16), background)
+    for name, page in pairs(pages) do
+        page.Visible = name == activePage
+        navButtons[name].BackgroundColor3 = name == activePage and background:Lerp(accent, 0.2) or background
+        navButtons[name].TextColor3 = white
+        navButtons[name].BackgroundTransparency = name == activePage and 0.35 or 1
+        local indicator = navButtons[name]:FindFirstChild("ActiveIndicator")
+        if indicator then indicator.Visible = name == activePage end
+    end
+    for _, refresh in ipairs(widgetRefreshers) do refresh() end
+end
+refreshUI()
+local dragStart, panelStart
+connect(dragSurface.InputBegan, function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragStart, panelStart = input.Position, panel.Position
+    end
+end)
+connect(Input.InputChanged, function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        if activeSlider then activeSlider(input.Position.X) end
+        if dragStart then
+            local delta = input.Position - dragStart
+            local view = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
+            panel.Position = UDim2.fromOffset(
+                math.clamp(panelStart.X.Offset + delta.X, 0, math.max(0, view.X - panel.AbsoluteSize.X)),
+                math.clamp(panelStart.Y.Offset + delta.Y, 0, math.max(0, view.Y - panel.AbsoluteSize.Y)))
+        end
+    end
+end)
+
 switch("Combate", "Sistema ativo", "F8 pausa a mira e o disparo automatico.", "Enabled")
 switch("Combate", "Assistencia de mira", "Mantem a parte escolhida alinhada ao reticulo.", "Aim")
 choice("Combate", "Ativacao", "Automatico acompanha sem precisar segurar o mouse.", "AimMode", {"Automatico", "Ao segurar"})
@@ -704,42 +744,9 @@ do
 end
 
 
-refreshUI = function()
-    accent = themes[Config.Theme] or themes.Azul
-    for _, binding in ipairs(themeBindings) do binding[1][binding[2]] = accent end
-    circle:FindFirstChildOfClass("UIStroke").Color = accent
-    panelGradient.Enabled = Config.Gradient
-    panel.BackgroundColor3 = Config.Gradient and Color3.new(1, 1, 1) or background
-    panelGradient.Color = ColorSequence.new(background:Lerp(accent, 0.16), background)
-    for name, page in pairs(pages) do
-        page.Visible = name == activePage
-        navButtons[name].BackgroundColor3 = name == activePage and background:Lerp(accent, 0.2) or background
-        navButtons[name].TextColor3 = white
-        navButtons[name].BackgroundTransparency = name == activePage and 0.35 or 1
-        local indicator = navButtons[name]:FindFirstChild("ActiveIndicator")
-        if indicator then indicator.Visible = name == activePage end
-    end
-    for _, refresh in ipairs(widgetRefreshers) do refresh() end
-end
+
 refreshUI()
-local dragStart, panelStart
-connect(header.InputBegan, function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragStart, panelStart = input.Position, panel.Position
-    end
-end)
-connect(Input.InputChanged, function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement then
-        if activeSlider then activeSlider(input.Position.X) end
-        if dragStart then
-            local delta = input.Position - dragStart
-            local view = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
-            panel.Position = UDim2.fromOffset(
-                math.clamp(panelStart.X.Offset + delta.X, 0, math.max(0, view.X - panel.AbsoluteSize.X)),
-                math.clamp(panelStart.Y.Offset + delta.Y, 0, math.max(0, view.Y - panel.AbsoluteSize.Y)))
-        end
-    end
-end)
+status.Text = "Interface pronta / UI 3.1"
 
 resetAim = function()
     selected, selectedCharacter, angularSpeed, trackingLocked = nil, nil, 0, false
@@ -1144,3 +1151,31 @@ if game.PlaceId ~= 84448037861644 then
     warn("PlaceId diferente do Urban Reload informado: " .. tostring(game.PlaceId))
 end
 print("Zyon Urban Reload carregado. RightShift: menu. F8: pausar. End: encerrar. Vincule a arma na aba Disparo.")
+
+end, function(message) return debug.traceback(tostring(message), 2) end)
+if not startupOK then
+    warn("ZYON UI 3.1: " .. tostring(startupError))
+    local player = game:GetService("Players").LocalPlayer
+    local parent = player and player:FindFirstChildOfClass("PlayerGui")
+    if parent then
+        local failed = parent:FindFirstChild("ZyonUrbanReload")
+        if failed then failed:Destroy() end
+        local old = parent:FindFirstChild("ZyonStartupError")
+        if old then old:Destroy() end
+        local screen = Instance.new("ScreenGui")
+        screen.Name="ZyonStartupError"; screen.ResetOnSpawn=false; screen.DisplayOrder=1000
+        local message=Instance.new("TextBox")
+        message.Size=UDim2.new(0.85,0,0.55,0); message.Position=UDim2.fromScale(0.075,0.15)
+        message.BackgroundColor3=Color3.fromRGB(40,30,54); message.TextColor3=Color3.new(1,1,1)
+        message.TextSize=14; message.Font=Enum.Font.Code; message.TextWrapped=true
+        message.ClearTextOnFocus=false; message.TextEditable=false
+        message.TextXAlignment=Enum.TextXAlignment.Left; message.TextYAlignment=Enum.TextYAlignment.Top
+        message.Text="UI 3.1 — falha ao iniciar. Envie uma captura deste erro:\n\n"..tostring(startupError)
+        message.Parent=screen
+        local close=Instance.new("TextButton")
+        close.Size=UDim2.new(0.85,0,0,40); close.Position=UDim2.fromScale(0.075,0.72)
+        close.Text="Fechar erro"; close.Parent=screen
+        close.Activated:Connect(function() screen:Destroy() end)
+        screen.Parent=parent
+    end
+end
