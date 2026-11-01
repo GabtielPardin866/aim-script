@@ -26,7 +26,7 @@ local Config = {
     FireInterval = 0.12,
     FirePulseSeconds = 0.05,
     FireTolerancePixels = 5,
-    Theme = "Azul",
+    Theme = "Violeta",
     Gradient = false,
     TargetPart = "Head", -- Head, Chest, Root
     FOV = 140, -- radius in screen pixels
@@ -115,12 +115,12 @@ make("UIStroke", {Color = accent, Thickness = 1, Transparency = 0.35}, circle)
 local themes = {
     Azul = Color3.fromRGB(94, 163, 255),
     Verde = Color3.fromRGB(72, 210, 159),
-    Violeta = Color3.fromRGB(167, 139, 250),
+    Violeta = Color3.fromRGB(133, 82, 205),
     Ambar = Color3.fromRGB(244, 181, 83),
 }
-local background = Color3.fromRGB(16, 18, 24)
-local surface = Color3.fromRGB(26, 29, 38)
-local muted = Color3.fromRGB(140, 149, 168)
+local background = Color3.fromRGB(49, 39, 67)
+local surface = Color3.fromRGB(83, 69, 103)
+local muted = Color3.fromRGB(174, 161, 191)
 local themeBindings, widgetRefreshers = {}, {}
 local function colored(object, property)
     table.insert(themeBindings, {object, property})
@@ -141,26 +141,26 @@ local function textLabel(parent, text, position, size, fontSize, color)
 end
 local panel = round(make("Frame", {
     Name = "Settings", Position = UDim2.fromOffset(40, 70),
-    Size = UDim2.fromOffset(760, 550), BackgroundColor3 = background,
+    Size = UDim2.fromOffset(760, 550), BackgroundColor3 = background, BackgroundTransparency = 0.12,
     BorderSizePixel = 0, Active = true, ZIndex = 10,
-}, gui), 14)
-make("UIStroke", {Color = Color3.fromRGB(57, 63, 79), Thickness = 1}, panel)
+}, gui), 9)
+make("UIStroke", {Color = Color3.fromRGB(112, 91, 136), Transparency = 0.65, Thickness = 1}, panel)
 local panelScale = make("UIScale", {Scale = 1}, panel)
 local panelGradient = make("UIGradient", {Enabled = false, Rotation = 35}, panel)
-colored(make("Frame", {Position = UDim2.fromOffset(16, 0),
-    Size = UDim2.new(1, -32, 0, 2), BorderSizePixel = 0, ZIndex = 11}, panel), "BackgroundColor3")
-local header = make("Frame", {Size = UDim2.new(1, -100, 0, 70),
+local header = make("Frame", {Size = UDim2.new(1, -136, 0, 48),
     BackgroundTransparency = 1, Active = true, ZIndex = 11}, panel)
-local title = colored(textLabel(header, "ZYON", UDim2.fromOffset(24, 16), UDim2.fromOffset(125, 25), 22), "TextColor3")
-title.Font = Enum.Font.GothamBold
-textLabel(header, "URBAN RELOAD  /  CONTROLE DE COMBATE", UDim2.fromOffset(24, 43), UDim2.fromOffset(430, 16), 10, muted)
-local function headerButton(text, x)
-    return round(make("TextButton", {Position = UDim2.new(1, x, 0, 22), Size = UDim2.fromOffset(30, 30),
-        BackgroundColor3 = surface, BorderSizePixel = 0, Text = text, Font = Enum.Font.Gotham,
-        TextColor3 = white, TextSize = 17, ZIndex = 13}, panel), 7)
+textLabel(header, "ZYON  /  Urban Reload", UDim2.fromOffset(20, 13), UDim2.fromOffset(420, 22), 12)
+make("Frame", {Position=UDim2.fromOffset(0,48), Size=UDim2.new(1,0,0,1),
+    BackgroundColor3=muted, BackgroundTransparency=0.85, BorderSizePixel=0, ZIndex=11}, panel)
+local function headerButton(label, x)
+    return round(make("TextButton", {Position=UDim2.new(1,x,0,8), Size=UDim2.fromOffset(36,32),
+        BackgroundTransparency=1, Text=label, Font=Enum.Font.Gotham, TextSize=18,
+        TextColor3=white, BorderSizePixel=0, ZIndex=13},panel),5)
 end
-local minimize, close = headerButton("-", -86), headerButton("x", -48)
-local sidebar = make("Frame", {Position = UDim2.fromOffset(14, 80), Size = UDim2.fromOffset(172, 404),
+local minimize, maximize, close = headerButton("−",-124), headerButton("□",-84), headerButton("×",-44)
+local expanded = false
+connect(maximize.Activated,function() expanded=not expanded end)
+local sidebar = make("Frame", {Position = UDim2.fromOffset(14, 64), Size = UDim2.fromOffset(172, 404),
     BackgroundTransparency = 1, ZIndex = 11}, panel)
 local pages, navButtons, activePage = {}, {}, "Combate"
 local pageDescriptions = {
@@ -170,10 +170,10 @@ local pageDescriptions = {
     Aparencia = "Escolha a cor e o acabamento do painel.",
     Visual = "Catalogo Roblox / previa 3D e aparencia local.",
 }
-local pageTitle = textLabel(panel, "Combate", UDim2.fromOffset(208, 82), UDim2.fromOffset(510, 28), 22)
+local pageTitle = textLabel(panel, "Combate", UDim2.fromOffset(208, 64), UDim2.fromOffset(510, 28), 22)
 pageTitle.Font = Enum.Font.GothamBold
 local searchBox = round(make("TextBox", {
-    Position = UDim2.fromOffset(208, 148), Size = UDim2.fromOffset(522, 30),
+    Position = UDim2.fromOffset(208, 126), Size = UDim2.fromOffset(522, 30),
     BackgroundColor3 = surface, BorderSizePixel = 0, Text = "", PlaceholderText = "Buscar controles nesta aba...",
     PlaceholderColor3 = muted, ClearTextOnFocus = false, TextColor3 = white, TextSize = 12,
     Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 12,
@@ -185,18 +185,22 @@ local function filterCards()
     for _, item in ipairs(searchableCards) do item.object.Visible = query == "" or string.find(item.search, query, 1, true) ~= nil end
 end
 connect(searchBox:GetPropertyChangedSignal("Text"), filterCards)
-local pageDescription = textLabel(panel, pageDescriptions.Combate, UDim2.fromOffset(208, 113), UDim2.fromOffset(520, 21), 12, muted)
+local pageDescription = textLabel(panel, pageDescriptions.Combate, UDim2.fromOffset(208, 98), UDim2.fromOffset(520, 21), 12, muted)
 for index, name in ipairs({"Combate", "Disparo", "Visuais", "Visual", "Aparencia"}) do
-    local nav = round(make("TextButton", {Position = UDim2.fromOffset(0, (index - 1) * 48),
+    local nav = round(make("TextButton", {Position = UDim2.fromOffset(0, (index - 1) * 44),
         Size = UDim2.fromOffset(172, 40), BackgroundColor3 = surface, BorderSizePixel = 0,
-        Text = string.format("%02d   %s", index, name), Font = Enum.Font.GothamMedium,
+        Text = "       " .. name, Font = Enum.Font.GothamMedium,
         TextSize = 13, TextColor3 = muted, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 12}, sidebar))
-    make("UIPadding", {PaddingLeft = UDim.new(0, 14)}, nav)
-    local page = make("ScrollingFrame", {Name = name, Position = UDim2.fromOffset(208, 188),
-        Size = UDim2.fromOffset(530, 298), BackgroundTransparency = 1, BorderSizePixel = 0,
+    make("UIPadding", {PaddingLeft = UDim.new(0, 8)}, nav)
+    local icons = {"◎", "⌁", "◉", "◇", "☼"}
+    textLabel(nav, icons[index], UDim2.fromOffset(12,9), UDim2.fromOffset(22,22),18)
+    colored(round(make("Frame", {Name="Selected",Position=UDim2.fromOffset(0,11),
+        Size=UDim2.fromOffset(3,18),BorderSizePixel=0,ZIndex=13},nav),2),"BackgroundColor3")
+    local page = make("ScrollingFrame", {Name = name, Position = UDim2.fromOffset(208, 166),
+        Size = UDim2.fromOffset(530, 320), BackgroundTransparency = 1, BorderSizePixel = 0,
         CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y,
         ScrollBarThickness = 3, ScrollBarImageColor3 = accent, Visible = name == activePage, ZIndex = 11}, panel)
-    make("UIListLayout", {Padding = UDim.new(0, 9), SortOrder = Enum.SortOrder.LayoutOrder}, page)
+    make("UIListLayout", {Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder}, page)
     make("UIPadding", {PaddingBottom = UDim.new(0, 6), PaddingRight = UDim.new(0, 8)}, page)
     pages[name], navButtons[name] = page, nav
     colored(page, "ScrollBarImageColor3")
@@ -235,10 +239,10 @@ connect(reopen.Activated, function() setMenu(true) end)
 local order = 0
 local function card(page, label, description, height)
     order = order + 1
-    local object = round(make("Frame", {Size = UDim2.new(1, 0, 0, height or 66),
-        BackgroundColor3 = surface, BorderSizePixel = 0, LayoutOrder = order, ZIndex = 12}, pages[page]), 9)
-    textLabel(object, label, UDim2.fromOffset(14, 11), UDim2.new(1, -155, 0, 20), 13)
-    textLabel(object, description, UDim2.fromOffset(14, 35), UDim2.new(1, -30, 0, 17), 10, muted)
+    local object = round(make("Frame", {Size = UDim2.new(1, 0, 0, height or 52),
+        BackgroundColor3 = surface, BackgroundTransparency = 0.38, BorderSizePixel = 0, LayoutOrder = order, ZIndex = 12}, pages[page]), 5)
+    textLabel(object, label, UDim2.fromOffset(12, 7), UDim2.new(1, -170, 0, 20), 12)
+    textLabel(object, description, UDim2.fromOffset(12, 29), UDim2.new(1, -24, 0, 17), 10, muted)
     table.insert(searchableCards, {object = object, search = string.lower(label .. " " .. description)})
     return object
 end
@@ -249,36 +253,62 @@ local function changed()
 end
 local function switch(page, label, description, key)
     local object = card(page, label, description)
-    local track = round(make("TextButton", {Position = UDim2.new(1, -64, 0, 12), Size = UDim2.fromOffset(48, 24),
+    local track = round(make("TextButton", {Position = UDim2.new(1, -64, 0, 12), Size = UDim2.fromOffset(40, 20),
         BorderSizePixel = 0, Text = "", AutoButtonColor = false, ZIndex = 13}, object), 12)
-    local knob = round(make("Frame", {Size = UDim2.fromOffset(18, 18), BackgroundColor3 = white,
+    make("UIStroke", {Color=muted, Transparency=0.6, Thickness=1},track)
+    local knob = round(make("Frame", {Size = UDim2.fromOffset(14, 14), BackgroundColor3 = white,
         BorderSizePixel = 0, ZIndex = 14}, track), 9)
     table.insert(widgetRefreshers, function()
-        track.BackgroundColor3 = Config[key] and accent or Color3.fromRGB(63, 68, 83)
-        knob.Position = UDim2.fromOffset(Config[key] and 27 or 3, 3)
+        track.BackgroundColor3 = Config[key] and accent or Color3.fromRGB(102, 86, 122)
+        knob.Position = UDim2.fromOffset(Config[key] and 23 or 3, 3)
+        knob.BackgroundColor3 = Config[key] and Color3.fromRGB(30,20,43) or muted
     end)
     connect(track.Activated, function() Config[key] = not Config[key]; changed() end)
 end
+local dropdown
+local function closeDropdown()
+    if dropdown then dropdown:Destroy(); dropdown=nil end
+end
+connect(panel:GetPropertyChangedSignal("Visible"),closeDropdown)
 local function choice(page, label, description, key, values)
-    local object = card(page, label, description)
-    local control = round(make("TextButton", {Position = UDim2.new(1, -148, 0, 9), Size = UDim2.fromOffset(132, 27),
-        BackgroundColor3 = Color3.fromRGB(38, 43, 55), BorderSizePixel = 0, TextColor3 = white,
-        TextSize = 11, Font = Enum.Font.GothamMedium, ZIndex = 13}, object), 6)
-    table.insert(widgetRefreshers, function() control.Text = tostring(Config[key]) .. "  >" end)
-    connect(control.Activated, function()
-        Config[key] = values[((table.find(values, Config[key]) or 0) % #values) + 1]
-        changed()
+    local object = card(page,label,description)
+    local control = round(make("TextButton", {Position=UDim2.new(1,-166,0,5),Size=UDim2.fromOffset(154,25),
+        BackgroundColor3=surface,BackgroundTransparency=0.1,BorderSizePixel=0,TextColor3=white,
+        TextSize=11,Font=Enum.Font.Gotham,ZIndex=13},object),5)
+    table.insert(widgetRefreshers,function() control.Text=tostring(Config[key]).."    ⌄" end)
+    connect(control.Activated,function()
+        if dropdown then closeDropdown(); return end
+        dropdown=make("TextButton",{Size=UDim2.fromScale(1,1),BackgroundTransparency=1,Text="",ZIndex=50},gui)
+        dropdown.Activated:Connect(closeDropdown)
+        local position=control.AbsolutePosition
+        local view=gui.AbsoluteSize
+        local height=math.min(#values*32+8,224)
+        local menu=round(make("ScrollingFrame",{Position=UDim2.fromOffset(
+            math.clamp(position.X,0,math.max(0,view.X-180)),
+            math.clamp(position.Y+control.AbsoluteSize.Y+4,0,math.max(0,view.Y-height))),
+            Size=UDim2.fromOffset(180,height),BackgroundColor3=background,BorderSizePixel=0,
+            ScrollBarThickness=3,CanvasSize=UDim2.fromOffset(0,#values*32+8),ZIndex=51},dropdown),6)
+        make("UIStroke",{Color=muted,Transparency=0.6},menu)
+        for i,v in ipairs(values) do
+            local option=round(make("TextButton",{Position=UDim2.fromOffset(4,4+(i-1)*32),
+                Size=UDim2.new(1,-8,0,30),BackgroundColor3=surface,
+                BackgroundTransparency=Config[key]==v and 0 or 1,Text=tostring(v),
+                Font=Enum.Font.Gotham,TextSize=12,TextColor3=white,BorderSizePixel=0,ZIndex=52},menu),4)
+            option.Activated:Connect(function() Config[key]=v; closeDropdown(); changed() end)
+        end
     end)
 end
 local activeSlider
 local function slider(page, label, description, key, minimum, maximum, increment, suffix)
-    local object = card(page, label, description, 90)
-    local value = colored(textLabel(object, "", UDim2.new(1, -140, 0, 11), UDim2.fromOffset(124, 20), 12), "TextColor3")
+    local object = card(page, label, description, 60)
+    local heading = object:FindFirstChildOfClass("TextLabel")
+    if heading then heading.Size = UDim2.new(1, -260, 0, 20) end
+    local value = colored(textLabel(object, "", UDim2.new(1, -241, 0, 7), UDim2.fromOffset(54, 20), 12), "TextColor3")
     value.TextXAlignment = Enum.TextXAlignment.Right
-    local hit = make("TextButton", {Position = UDim2.fromOffset(16, 57), Size = UDim2.new(1, -32, 0, 25),
+    local hit = make("TextButton", {Position = UDim2.new(1, -178, 0, 7), Size = UDim2.fromOffset(162, 25),
         BackgroundTransparency = 1, Text = "", ZIndex = 13}, object)
     local rail = round(make("Frame", {Position = UDim2.fromOffset(0, 10), Size = UDim2.new(1, 0, 0, 4),
-        BackgroundColor3 = Color3.fromRGB(55, 61, 76), BorderSizePixel = 0, ZIndex = 13}, hit), 2)
+        BackgroundColor3 = Color3.fromRGB(113, 95, 133), BorderSizePixel = 0, ZIndex = 13}, hit), 2)
     local fill = colored(round(make("Frame", {Size = UDim2.fromScale(0, 1), BorderSizePixel = 0, ZIndex = 14}, rail), 2), "BackgroundColor3")
     local knob = round(make("Frame", {AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(12, 12),
         BackgroundColor3 = white, BorderSizePixel = 0, ZIndex = 15}, rail), 6)
@@ -342,7 +372,7 @@ switch("Visuais", "Circulo de FOV", "Mostra a area de aquisicao ao fechar o menu
 choice("Visuais", "Barra de vida", "Cor proporcional ao HP atual do Humanoid.", "HealthSide", {"Left", "Right"})
 slider("Visuais", "Distancia do ESP", "Ajusta somente os indicadores visuais.", "ESPDistanceLimit", 100, 2000, 50, " st")
 choice("Aparencia", "Cor de destaque", "Aplica a cor ao menu, FOV e ESP.", "Theme", {"Azul", "Verde", "Violeta", "Ambar"})
-switch("Aparencia", "Degrade sutil", "Desligado: fundo grafite solido.", "Gradient")
+switch("Aparencia", "Degrade sutil", "Acabamento roxo translucido com degrade opcional.", "Gradient")
 card("Aparencia", "Janela adaptavel", "Arraste o cabecalho. O tamanho se ajusta a tela.", 68)
 
 -- Local cosmetic replica: leaves the gameplay rig, joints and server character untouched.
@@ -673,7 +703,9 @@ refreshUI = function()
     for name, page in pairs(pages) do
         page.Visible = name == activePage
         navButtons[name].BackgroundColor3 = name == activePage and background:Lerp(accent, 0.2) or background
-        navButtons[name].TextColor3 = name == activePage and accent or muted
+        navButtons[name].TextColor3 = white
+        navButtons[name].BackgroundTransparency = name == activePage and 0.35 or 1
+        navButtons[name].Selected.Visible = name == activePage
     end
     for _, refresh in ipairs(widgetRefreshers) do refresh() end
 end
@@ -1016,7 +1048,7 @@ local function frame(deltaTime)
         return
     end
     local scale = math.clamp(math.min((camera.ViewportSize.X - 32) / 760,
-        (camera.ViewportSize.Y - 32) / 550), 0.25, 1)
+        (camera.ViewportSize.Y - 32) / 550), 0.25, expanded and 1.35 or 1)
     panelScale.Scale = scale
     panel.Position = UDim2.fromOffset(
         math.clamp(panel.Position.X.Offset, 0, math.max(0, camera.ViewportSize.X - 760 * scale)),
