@@ -52,6 +52,7 @@ local Config = {
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local Input = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
@@ -84,6 +85,19 @@ local function connect(signal, callback)
     local connection = signal:Connect(callback)
     table.insert(connections, connection)
     return connection
+end
+
+-- One active transition per object; rapid clicks replace older transitions.
+local animations = setmetatable({}, {__mode = "k"})
+local function animate(object, properties, duration)
+    if animations[object] then animations[object]:Cancel() end
+    local tween = TweenService:Create(object,
+        TweenInfo.new(duration or 0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), properties)
+    animations[object] = tween
+    tween.Completed:Once(function()
+        if animations[object] == tween then animations[object] = nil end
+    end)
+    tween:Play()
 end
 
 local function make(class, properties, parent)
@@ -156,9 +170,14 @@ local dragSurface = make("TextButton", {Size=UDim2.fromScale(1,1), Text="", Back
 make("Frame", {Position=UDim2.fromOffset(0,48), Size=UDim2.new(1,0,0,1),
     BackgroundColor3=muted, BackgroundTransparency=0.85, BorderSizePixel=0, ZIndex=11}, panel)
 local function headerButton(label, x)
-    return round(make("TextButton", {Position=UDim2.new(1,x,0,8), Size=UDim2.fromOffset(36,32),
+    local button = round(make("TextButton", {Position=UDim2.new(1,x,0,8), Size=UDim2.fromOffset(36,32),
         BackgroundTransparency=1, Text=label, Font=Enum.Font.Gotham, TextSize=18,
         TextColor3=white, BorderSizePixel=0, ZIndex=13},panel),5)
+    button.BackgroundColor3 = surface
+    button.AutoButtonColor = false
+    connect(button.MouseEnter, function() animate(button,{BackgroundTransparency=0.2}) end)
+    connect(button.MouseLeave, function() animate(button,{BackgroundTransparency=1}) end)
+    return button
 end
 local minimize, maximize, close = headerButton("−",-124), headerButton("□",-84), headerButton("×",-44)
 local expanded = false
@@ -215,10 +234,13 @@ for index, name in ipairs({"Combate", "Disparo", "Visuais", "Visual", "Aparencia
     pages[name], navButtons[name] = page, nav
     colored(page, "ScrollBarImageColor3")
     connect(nav.Activated, function()
+        if activePage == name then return end
         activePage = name
         searchBox.Text = ""
         pageTitle.Text, pageDescription.Text = name, pageDescriptions[name]
         refreshUI()
+        page.Position = UDim2.fromOffset(220,166)
+        animate(page,{Position=UDim2.fromOffset(208,166)},0.2)
     end)
 end
 textLabel(sidebar, "CONTROLES", UDim2.fromOffset(10, 270), UDim2.fromOffset(150, 20), 10, muted)
@@ -239,6 +261,16 @@ colored(reopen, "TextColor3")
 local function setMenu(open)
     closeDropdown()
     panel.Visible, reopen.Visible = open, not open
+    if open then
+        panel.BackgroundTransparency = 0.65
+        animate(panel,{BackgroundTransparency=0.12},0.22)
+        local page = pages[activePage]
+        page.Position = UDim2.fromOffset(220,166)
+        animate(page,{Position=UDim2.fromOffset(208,166)},0.22)
+    else
+        reopen.BackgroundTransparency = 1
+        animate(reopen,{BackgroundTransparency=0},0.2)
+    end
     held = false
     if resetAim then resetAim() end
     if stopFire then stopFire() end
@@ -270,9 +302,9 @@ local function switch(page, label, description, key)
     local knob = round(make("Frame", {Size = UDim2.fromOffset(14, 14), BackgroundColor3 = white,
         BorderSizePixel = 0, ZIndex = 14}, track), 9)
     table.insert(widgetRefreshers, function()
-        track.BackgroundColor3 = Config[key] and accent or Color3.fromRGB(102, 86, 122)
-        knob.Position = UDim2.fromOffset(Config[key] and 23 or 3, 3)
-        knob.BackgroundColor3 = Config[key] and Color3.fromRGB(30,20,43) or muted
+        animate(track,{BackgroundColor3 = Config[key] and accent or Color3.fromRGB(102, 86, 122)})
+        animate(knob,{Position = UDim2.fromOffset(Config[key] and 23 or 3, 3),
+            BackgroundColor3 = Config[key] and Color3.fromRGB(30,20,43) or muted})
     end)
     connect(track.Activated, function() Config[key] = not Config[key]; changed() end)
 end
@@ -303,6 +335,8 @@ local function choice(page, label, description, key, values)
             ScrollBarThickness=3,ScrollingDirection=Enum.ScrollingDirection.Y,
             Active=true,CanvasSize=UDim2.fromOffset(0,#values*32+8),ZIndex=51},dropdown),6)
         make("UIStroke",{Color=muted,Transparency=0.6},menu)
+        menu.BackgroundTransparency = 0.5
+        animate(menu,{BackgroundTransparency=0},0.15)
         for i,v in ipairs(values) do
             local option=round(make("TextButton",{Position=UDim2.fromOffset(4,4+(i-1)*32),
                 Size=UDim2.new(1,-8,0,30),BackgroundColor3=surface,
@@ -354,9 +388,11 @@ refreshUI = function()
     panelGradient.Color = ColorSequence.new(background:Lerp(accent, 0.16), background)
     for name, page in pairs(pages) do
         page.Visible = name == activePage
-        navButtons[name].BackgroundColor3 = name == activePage and background:Lerp(accent, 0.2) or background
+        animate(navButtons[name], {
+            BackgroundColor3 = name == activePage and background:Lerp(accent, 0.2) or background,
+            BackgroundTransparency = name == activePage and 0.35 or 1,
+        })
         navButtons[name].TextColor3 = white
-        navButtons[name].BackgroundTransparency = name == activePage and 0.35 or 1
         local indicator = navButtons[name]:FindFirstChild("ActiveIndicator")
         if indicator then indicator.Visible = name == activePage end
     end
@@ -762,6 +798,10 @@ end
 local function cleanup()
     if stopped then return end
     stopped = true
+    for object, tween in pairs(animations) do
+        tween:Cancel()
+        animations[object] = nil
+    end
     if restoreCosmetic then restoreCosmetic() end
     for _, entry in pairs(entries) do entry.highlight:Destroy() end
     RunService:UnbindFromRenderStep(binding)
